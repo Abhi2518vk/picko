@@ -127,25 +127,32 @@ export default function ShopDetail() {
                     {products.map((product) => (
                         <div
                             key={product.id}
-                            className="flex gap-4 items-start border-b border-gray-50 pb-6 last:border-0 cursor-pointer group"
+                            className="flex gap-3 items-start border-b border-gray-50 pb-6 last:border-0 cursor-pointer hover:bg-gray-50/50 p-3 -mx-3 rounded-lg transition-colors"
                             onClick={() => handleProductSelect(product)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    handleProductSelect(product);
+                                }
+                            }}
                         >
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                                 <div className="flex items-start gap-2">
-                                    {/* Veg/Non-veg indicator placeholder */}
-                                    <div className="w-3 h-3 border border-green-600 flex items-center justify-center mt-1">
+                                    <div className="w-3 h-3 border border-green-600 flex items-center justify-center mt-1 flex-shrink-0">
                                         <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
                                     </div>
-                                    <h3 className="font-bold text-gray-800 text-base">{product.name}</h3>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-bold text-gray-800 text-base break-words">{product.name}</h3>
+                                        <p className="font-medium text-gray-700 mt-1">₹{product.price}</p>
+                                        <p className="text-xs text-gray-400 mt-2 line-clamp-2">{product.description}</p>
+                                    </div>
                                 </div>
-                                <p className="font-medium text-gray-700 mt-1">₹{product.price}</p>
-                                <p className="text-xs text-gray-400 mt-2 line-clamp-2">{product.description}</p>
                             </div>
 
-                            <div className="relative w-32 h-28 shrink-0">
-                                <img src={product.image} alt={product.name} className="w-full h-full object-cover rounded-xl" />
+                            <div className="relative w-32 h-28 flex-shrink-0">
+                                <img src={product.image} alt={product.name} className="w-full h-full object-cover rounded-xl cursor-pointer" onClick={(e) => { e.stopPropagation(); handleProductSelect(product); }} />
 
-                                {/* Add Button */}
                                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg border border-gray-200 w-24 flex items-center justify-between text-green-600 font-bold overflow-hidden h-9">
                                     {getQuantity(product.id) === 0 ? (
                                         <button
@@ -153,7 +160,7 @@ export default function ShopDetail() {
                                                 e.stopPropagation();
                                                 handleAddToCart(product);
                                             }}
-                                            className="w-full h-full text-sm uppercase hover:bg-green-50 transition-colors"
+                                            className="w-full h-full text-sm uppercase hover:bg-green-50 transition-colors font-semibold"
                                         >
                                             Add
                                         </button>
