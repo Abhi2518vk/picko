@@ -5,7 +5,6 @@ import { Product } from "@/lib/mockData";
 import { SafeStorage } from "@/lib/storage";
 import { cartItemSchema, safeValidate } from "@/lib/validation";
 
-// Cart Context Types
 export type CartItem = Product & { quantity: number };
 
 type CartContextType = {
@@ -21,16 +20,13 @@ type CartContextType = {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-// Cart Provider Component
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load cart from localStorage on mount
   useEffect(() => {
     const savedCart = SafeStorage.getJSON<CartItem[]>("cart");
     if (savedCart) {
-      // Validate cart items
       const validItems = savedCart.filter(item => {
         const validation = safeValidate(cartItemSchema, item);
         return validation.success;
@@ -41,30 +37,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveCart = (newItems: CartItem[]) => {
-    setItems(newItems);
     SafeStorage.setJSON("cart", newItems);
   };
 
+  // ✅ FIXED: addToCart only ever adds a fresh item with quantity 1
+  // It will never increment — updateQuantity handles that
   const addToCart = (product: Product) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.id === product.id);
-      let newItems: CartItem[];
-      
+
       if (existing) {
-        newItems = prev.map((i) => 
-          i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      } else {
-        const cartItem: CartItem = { ...product, quantity: 1 };
-        const validation = safeValidate(cartItemSchema, cartItem);
-        if (!validation.success) {
-          console.error("Invalid cart item:", validation.errors);
-          return prev;
-        }
-        newItems = [...prev, cartItem];
+        return prev; // already in cart, do nothing
       }
-      
-      saveCart(newItems);
+
+      const cartItem: CartItem = { ...product, quantity: 1 };
+      const validation = safeValidate(cartItemSchema, cartItem);
+      if (!validation.success) {
+        console.error("Invalid cart item:", validation.errors);
+        return prev;
+      }
+
+      const newItems = [...prev, cartItem];
+      saveCart(newItems); // ✅ saveCart inside the block
       return newItems;
     });
   };
@@ -80,15 +74,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const updateQuantity = (productId: string, quantity: number) => {
     setItems((prev) => {
       let newItems: CartItem[];
-      
+
       if (quantity <= 0) {
         newItems = prev.filter((i) => i.id !== productId);
       } else {
-        newItems = prev.map((i) => 
+        newItems = prev.map((i) =>
           i.id === productId ? { ...i, quantity } : i
         );
-        
-        // Validate updated item
+
         const updatedItem = newItems.find(i => i.id === productId);
         if (updatedItem) {
           const validation = safeValidate(cartItemSchema, updatedItem);
@@ -98,7 +91,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      
+
       saveCart(newItems);
       return newItems;
     });
@@ -128,7 +121,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Cart Hook
 export const useCart = () => {
   const context = useContext(CartContext);
   if (!context) throw new Error("useCart must be used within CartProvider");

@@ -19,11 +19,8 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    useEffect(() => {
-        if (isLoggedIn) {
-            router.push("/");
-        }
-    }, [isLoggedIn, router]);
+    // Note: Don't redirect on isLoggedIn here - let the auth handlers manage navigation
+    // This prevents the home page flash before personal-info page
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.replace(/\D/g, "");
@@ -73,16 +70,15 @@ export default function LoginPage() {
         try {
             // In demo mode, any 6-digit OTP is valid
             if (otp.length === 6) {
-                const userData = {
-                    id: `phone_${phone}`,
-                    name: `User ${phone.slice(-4)}`,
-                    email: `user${phone.slice(-4)}@example.com`,
-                    image: "",
-                    gender: "other" as const,
-                };
-                setUser(userData);
-                await new Promise(resolve => setTimeout(resolve, 500));
-                router.push("/");
+const userData = {
+  id: `phone_${phone}`,
+  name: "",
+  email: `user${phone.slice(-4)}@example.com`,
+  image: "",
+};
+setUser(userData);
+await new Promise(resolve => setTimeout(resolve, 500));
+router.push("/personal-info");
             } else {
                 setError("Invalid OTP in demo mode. Please enter any 6-digit code.");
             }
@@ -120,15 +116,14 @@ export default function LoginPage() {
         try {
             const userData = {
                 id: `email_${email}`,
-                name: email.split("@")[0],
+                name: "",
                 email: email,
                 image: "",
-                gender: "other" as const,
             };
             
             setUser(userData);
             await new Promise(resolve => setTimeout(resolve, 500));
-            router.push("/");
+            router.push("/personal-info");
         } catch (err: any) {
             console.error("Email login error:", err);
             setError(err?.message || "Failed to login. Please try again.");
@@ -150,17 +145,16 @@ export default function LoginPage() {
                 // Demo mode: create mock user
                 const userData = {
                     id: "google_demo",
-                    name: "Google User",
+                    name: "",
                     email: "user@gmail.com",
                     image: "",
-                    gender: "other" as const,
                 };
                 
                 setUser(userData);
             }
             
             await new Promise(resolve => setTimeout(resolve, 500));
-            router.push("/");
+            router.push("/personal-info");
         } catch (err: any) {
             console.error("Google login error:", err);
             setError(err?.message || "Failed to login with Google.");
@@ -204,13 +198,12 @@ export default function LoginPage() {
                 {/* OTP Login */}
                 {loginMethod === "otp" && otpStep === "phone" && (
                     <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-gray-800 mb-6">Sign in with OTP</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 mb-6">Log in with Number</h2>
                         
                         {/* Phone Number Input */}
                         <div className="relative">
                             <div className="absolute left-4 top-3.5 flex items-center gap-2 border-r border-gray-200 pr-3">
-                                <span className="text-gray-600 font-medium">🇮🇳</span>
-                                <span className="text-gray-600 text-sm font-medium">+91</span>
+                                <span className="text-gray-600 text-sm font-medium">🇮🇳 +91</span>
                             </div>
                             <input
                                 type="text"
@@ -235,7 +228,7 @@ export default function LoginPage() {
                         </motion.button>
 
                         <p className="text-xs text-gray-500 mt-3 leading-relaxed">
-                            For development, use Firebase phone auth test numbers configured in Authentication → Sign-in method → Phone. For production, enable Blaze billing before sending real SMS OTPs.
+                            Enter your 10-digit phone number. For testing, use any valid number. We'll send an OTP for verification.
                         </p>
 
                         {/* Divider */}

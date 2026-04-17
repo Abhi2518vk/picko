@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { Product } from "@/lib/mockData";
 import { getUserCart, updateUserCart, firebaseInitialized } from "@/lib/firebase";
 import { GoogleOAuthProvider } from "@react-oauth/google";
@@ -12,7 +12,7 @@ export type User = {
     name: string;
     email: string;
     image: string;
-    gender?: string; // 'male', 'female', 'other'
+    gender?: string;
 };
 
 type AuthContextType = {
@@ -65,7 +65,6 @@ export function Providers({ children }: { children: ReactNode }) {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
 
-    // Load user from localStorage on mount
     useEffect(() => {
         const savedUser = SafeStorage.getJSON<User>("user");
         if (savedUser) {
@@ -75,7 +74,7 @@ export function Providers({ children }: { children: ReactNode }) {
         setAuthLoading(false);
     }, []);
 
-    const setUser = (user: User | null) => {
+    const setUser = useCallback((user: User | null) => {
         if (user) {
             SafeStorage.setJSON("user", user);
             setIsLoggedIn(true);
@@ -84,18 +83,12 @@ export function Providers({ children }: { children: ReactNode }) {
             setIsLoggedIn(false);
         }
         setUserState(user);
-    };
-
-    const logout = () => {
-        setUser(null);
-        setItems([]);
-        SafeStorage.removeItem("cart");
-    };
+    }, []);
 
     // Location State
     const [location, setLocationState] = useState<Location>(DEFAULT_LOCATION);
 
-    const detectLocation = () => {
+    const detectLocation = useCallback(() => {
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -111,33 +104,28 @@ export function Providers({ children }: { children: ReactNode }) {
                 }
             );
         }
-    };
+    }, []);
 
-    const manualLocation = (address: string, lat?: number, lng?: number) => {
+    const manualLocation = useCallback((address: string, lat?: number, lng?: number) => {
         setLocationState({
             lat: lat || DEFAULT_LOCATION.lat,
             lng: lng || DEFAULT_LOCATION.lng,
-            address: address,
+            address,
         });
-    };
+    }, []);
 
-    // Cart State with localStorage persistence
+    // Cart State
     const [items, setItems] = useState<CartItem[]>([]);
-    const [cartLoading, setCartLoading] = useState(true);
 
     useEffect(() => {
         const savedCart = SafeStorage.getJSON<CartItem[]>("cart");
-        if (savedCart) {
+        if (savedCart && Array.isArray(savedCart)) {
             setItems(savedCart);
         }
-        setCartLoading(false);
     }, []);
 
     useEffect(() => {
-        if (!user?.id || !firebaseInitialized) {
-            return;
-        }
-
+        if (!user?.id || !firebaseInitialized) return;
         getUserCart(user.id)
             .then((cartData) => {
                 const userCart = cartData?.items;
@@ -151,68 +139,102 @@ export function Providers({ children }: { children: ReactNode }) {
             });
     }, [user?.id]);
 
-    const persistCart = (newItems: CartItem[]) => {
-        setItems(newItems);
+    // Persist cart to SafeStorage immediately, and to Firebase asynchronously (never block UI)
+    const persistCart = useCallback((newItems: CartItem[], currentUserId?: string) => {
         SafeStorage.setJSON("cart", newItems);
-
-        if (user?.id && firebaseInitialized) {
-            updateUserCart(user.id, newItems).catch((error) => {
-                console.error("Failed to persist cart to Firebase:", error);
-            });
+        if (currentUserId && firebaseInitialized) {
+            // Defer Firebase update to next tick to avoid blocking UI
+            setTimeout(() => {
+                updateUserCart(currentUserId, newItems).catch((error) => {
+                    console.error("Failed to persist cart to Firebase:", error);
+                });
+            }, 0);
         }
-    };
+    }, []);
 
-    const addToCart = (product: Product) => {
+    // Memoize cart actions with stable dependencies
+    const addToCart = useCallback((product: Product) => {
         setItems((prev) => {
             const existing = prev.find((i) => i.id === product.id);
             const newItems = existing
-                ? prev.map((i) => (i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i))
+                ? prev.map((item) =>
+                      item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                  )
                 : [...prev, { ...product, quantity: 1 }];
-            persistCart(newItems);
+            // Persist after state update (non-blocking)
+            persistCart(newItems, user?.id);
             return newItems;
         });
-    };
+    }, [persistCart, user?.id]);
 
-    const removeFromCart = (productId: string) => {
+    const removeFromCart = useCallback((productId: string) => {
         setItems((prev) => {
             const newItems = prev.filter((i) => i.id !== productId);
-            persistCart(newItems);
+            persistCart(newItems, user?.id);
             return newItems;
         });
-    };
+    }, [persistCart, user?.id]);
 
-    const updateQuantity = (productId: string, quantity: number) => {
+    const updateQuantity = useCallback((productId: string, quantity: number) => {
         setItems((prev) => {
             const newItems = quantity <= 0
                 ? prev.filter((i) => i.id !== productId)
                 : prev.map((i) => (i.id === productId ? { ...i, quantity } : i));
-            persistCart(newItems);
+            persistCart(newItems, user?.id);
             return newItems;
         });
-    };
+    }, [persistCart, user?.id]);
 
-    const clearCart = () => {
+    const clearCart = useCallback(() => {
         setItems([]);
         SafeStorage.removeItem("cart");
         if (user?.id && firebaseInitialized) {
-            updateUserCart(user.id, []).catch((error) => {
-                console.error("Failed to clear cart in Firebase:", error);
-            });
+            // Defer Firebase update to next tick
+            setTimeout(() => {
+                updateUserCart(user.id, []).catch(console.error);
+            }, 0);
         }
-    };
+    }, [user?.id]);
 
-    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+    const logout = useCallback(() => {
+        setUser(null);
+        setItems([]);
+        SafeStorage.removeItem("cart");
+    }, [setUser]);
 
-    // Check if Google OAuth is properly configured
-    const hasValidGoogleClientId = 
-        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && 
+    const totalAmount = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
+    const totalItems = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
+
+    // Memoized context values to prevent unnecessary re-renders (fixes slow selection bug)
+    const cartValue = useMemo(
+        () => ({
+            items,
+            addToCart,
+            removeFromCart,
+            updateQuantity,
+            clearCart,
+            totalAmount,
+            totalItems,
+        }),
+        [items, addToCart, removeFromCart, updateQuantity, clearCart, totalAmount, totalItems]
+    );
+
+    const authValue = useMemo(() => ({
+        user, setUser, logout, isLoggedIn, loading: authLoading
+    }), [user, setUser, logout, isLoggedIn, authLoading]);
+
+    const locationValue = useMemo(() => ({
+        location, setLocation: setLocationState, detectLocation, manualLocation
+    }), [location, detectLocation, manualLocation]);
+
+    const hasValidGoogleClientId =
+        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID &&
         process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID !== "123456789012-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com";
 
     const providerContent = (
-        <AuthContext.Provider value={{ user, setUser, logout, isLoggedIn, loading: authLoading }}>
-            <LocationContext.Provider value={{ location, setLocation: setLocationState, detectLocation, manualLocation }}>
-                <CartContext.Provider value={{ items, addToCart, removeFromCart, clearCart, updateQuantity, totalAmount, totalItems }}>
+        <AuthContext.Provider value={authValue}>
+            <LocationContext.Provider value={locationValue}>
+                <CartContext.Provider value={cartValue}>
                     {children}
                 </CartContext.Provider>
             </LocationContext.Provider>
